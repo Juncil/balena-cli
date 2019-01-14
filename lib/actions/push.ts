@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+import { BalenaSDK } from 'balena-sdk';
 import { CommandDefinition } from 'capitano';
 import { stripIndent } from 'common-tags';
-import { BalenaSDK } from 'balena-sdk';
 
 import { registrySecretsHelp } from '../utils/messages';
 
@@ -107,6 +107,7 @@ export const push: CommandDefinition<
 		emulated: boolean;
 		nocache: boolean;
 		'registry-secrets': string;
+		live: boolean;
 	}
 > = {
 	signature: 'push <applicationOrDevice>',
@@ -166,6 +167,14 @@ export const push: CommandDefinition<
 			description: stripIndent`
 				Path to a local YAML or JSON file containing Docker registry passwords used to pull base images`,
 		},
+		{
+			signature: 'live',
+			alias: 'l',
+			boolean: true,
+			description: stripIndent`
+				Start a live session after the push, which will wait for code changes, and synchronise them with
+				running containers. This mode is only valid when pushing to a local device.`,
+		},
 	],
 	async action(params, options, done) {
 		const sdk = (await import('balena-sdk')).fromSharedOptions();
@@ -193,6 +202,13 @@ export const push: CommandDefinition<
 		const buildTarget = getBuildTarget(appOrDevice);
 		switch (buildTarget) {
 			case BuildTarget.Cloud:
+				// Ensure that the live argument has not been passed to a cloud build
+				if (options.live) {
+					exitWithExpectedError(
+						'The --live flag is only valid when pushing to a local device.',
+					);
+				}
+
 				const app = appOrDevice;
 				Bluebird.join(
 					sdk.auth.getToken(),
@@ -226,6 +242,7 @@ export const push: CommandDefinition<
 						source,
 						deviceHost: device,
 						registrySecrets,
+						live: options.live || false,
 					}),
 				)
 					.catch(BuildError, e => {
